@@ -625,7 +625,7 @@ def convert_single_example(example, tokenizer, is_training):
     tokens.append("[SEP]")
     segment_ids.append(0)
 
-    for i in xrange(doc_span.length):
+    for i in range(doc_span.length):
       split_token_index = doc_span.start + i
       token_to_orig_map[len(tokens)] = tok_to_orig_index[split_token_index]
       tokens.append(all_doc_tokens[split_token_index])
@@ -774,7 +774,7 @@ class CreateTFExampleFn(object):
             [input_feature.answer_type])
       else:
         token_map = [-1] * len(input_feature.input_ids)
-        for k, v in input_feature.token_to_orig_map.iteritems():
+        for k, v in input_feature.token_to_orig_map.items():
           token_map[k] = v
         features["token_map"] = create_int_feature(token_map)
 
@@ -1089,7 +1089,7 @@ class FeatureWriter(object):
       features["answer_types"] = create_int_feature([feature.answer_type])
     else:
       token_map = [-1] * len(feature.input_ids)
-      for k, v in feature.token_to_orig_map.iteritems():
+      for k, v in feature.token_to_orig_map.items():
         token_map[k] = v
       features["token_map"] = create_int_feature(token_map)
 
@@ -1125,13 +1125,19 @@ class ScoreSummary(object):
 def read_candidates_from_one_split(input_path):
   """Read candidates from a single jsonl file."""
   candidates_dict = {}
-  with gzip.GzipFile(fileobj=tf.gfile.Open(input_path)) as input_file:
+  def _open(path):
+    if path.endswith(".gz"):
+      return gzip.GzipFile(fileobj=tf.gfile.Open(path, "r"))
+    else:
+      return tf.gfile.Open(path, "r")
+
+#  with gzip.GzipFile(fileobj=tf.gfile.Open(input_path)) as input_file:
+  with _open(input_path) as input_file:
     tf.logging.info("Reading examples from: %s", input_path)
     for line in input_file:
       e = json.loads(line)
       candidates_dict[e["example_id"]] = e["long_answer_candidates"]
   return candidates_dict
-
 
 def read_candidates(input_pattern):
   """Read candidates with real multiple processes."""
@@ -1160,7 +1166,7 @@ def compute_predictions(example):
   n_best_size = 10
   max_answer_length = 30
 
-  for unique_id, result in example.results.iteritems():
+  for unique_id, result in example.results.items():
     if unique_id not in example.features:
       raise ValueError("No feature found with unique_id:", unique_id)
     token_map = example.features[unique_id]["token_map"].int64_list.value
@@ -1231,35 +1237,33 @@ def compute_predictions(example):
 
 def compute_pred_dict(candidates_dict, dev_features, raw_results):
   """Computes official answer key from raw logits."""
-  raw_results_by_id = [(int(res["unique_id"] + 1), res) for res in raw_results]
+#  raw_results_by_id = [(int(res["unique_id"] + 1), res) for res in raw_results]
+  raw_results_by_id = {int(res["unique_id"]):res for res in raw_results}
 
   # Cast example id to int32 for each example, similarly to the raw results.
   sess = tf.Session()
   all_candidates = candidates_dict.items()
   example_ids = tf.to_int32(np.array([int(k) for k, _ in all_candidates
                                      ])).eval(session=sess)
-  examples_by_id = zip(example_ids, all_candidates)
+  examples_by_id = dict(zip(example_ids, all_candidates))
 
   # Cast unique_id also to int32 for features.
   feature_ids = []
   features = []
   for f in dev_features:
-    feature_ids.append(f.features.feature["unique_ids"].int64_list.value[0] + 1)
+    feature_ids.append(f.features.feature["unique_ids"].int64_list.value[0])
     features.append(f.features.feature)
   feature_ids = tf.to_int32(np.array(feature_ids)).eval(session=sess)
-  features_by_id = zip(feature_ids, features)
+  features_by_id = dict(zip(feature_ids, features))
 
   # Join examplew with features and raw results.
   examples = []
-  merged = sorted(examples_by_id + raw_results_by_id + features_by_id)
-  for idx, datum in merged:
-    if isinstance(datum, tuple):
-      examples.append(EvalExample(datum[0], datum[1]))
-    elif "token_map" in datum:
-      examples[-1].features[idx] = datum
-    else:
-      examples[-1].results[idx] = datum
-
+  for example_id in examples_by_id:
+    example = examples_by_id[example_id]
+    examples.append(EvalExample(example[0], example[1]))
+    examples[-1].features[example_id] = features_by_id[example_id]
+    examples[-1].results[example_id] = raw_results_by_id[example_id]
+    
   # Construct prediction objects.
   tf.logging.info("Computing predictions...")
   summary_dict = {}
@@ -1397,7 +1401,7 @@ def main(_):
     tf.logging.info("  Num orig examples = %d", len(eval_examples))
     tf.logging.info("  Num split examples = %d", len(eval_features))
     tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
-    for spans, ids in num_spans_to_ids.iteritems():
+    for spans, ids in num_spans_to_ids.items():
       tf.logging.info("  Num split into %d = %d", spans, len(ids))
 
     predict_input_fn = input_fn_builder(
