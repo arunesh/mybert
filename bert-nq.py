@@ -1120,7 +1120,7 @@ def input_fn_builder(input_file, seq_length, is_training, drop_remainder):
 
 RawResult = collections.namedtuple(
     "RawResult",
-    ["unique_id", "start_logits", "end_logits", "answer_type_logits"])
+    ["unique_id", "start_logits", "end_logits", "answer_type", "answer_type_logits"])
 
 
 class FeatureWriter(object):
@@ -1298,7 +1298,8 @@ def compute_predictions(example):
           "end_byte": -1
       }],
       "short_answers_score": score,
-      "yes_no_answer": "NONE"
+      "yes_no_answer": "NONE",
+      "answer_type": int(np.argmax(summary.answer_type_logits))
   }
 
   return summary
