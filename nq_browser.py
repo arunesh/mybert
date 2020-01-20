@@ -35,6 +35,7 @@ import json
 import os
 import sys
 
+
 import wsgiref.simple_server
 
 from absl import app
@@ -45,8 +46,9 @@ import numpy as np
 import tornado.web
 import tornado.wsgi
 
-reload(sys)
-sys.setdefaultencoding('utf-8')
+# Since the default on Python 3 is UTF-8 already, there is no point in leaving those statements in.
+# reload(sys)
+# sys.setdefaultencoding('utf-8')
 
 FLAGS = flags.FLAGS
 
@@ -89,9 +91,9 @@ class Example(object):
     self.url = json_example['document_url']
     self.title = (
         json_example['document_title']
-        if json_example.has_key('document_title') else 'Wikipedia')
+        if 'document_title' in json_example else 'Wikipedia')
     self.example_id = base64.urlsafe_b64encode(
-        str(self.json_example['example_id']))
+        str(self.json_example['example_id']).encode())
     self.document_html = self.json_example['document_html'].encode('utf-8')
     self.document_tokens = self.json_example['document_tokens']
     self.question_text = json_example['question_text']
@@ -369,8 +371,9 @@ class NqServer(object):
 
 
 def main(unused_argv):
-  with open(FLAGS.nq_jsonl) as fileobj:
-    examples = load_examples(fileobj)
+#  with open(FLAGS.nq_jsonl) as fileobj:
+  fileobj = open(FLAGS.nq_jsonl)
+  examples = load_examples(fileobj)
 
   web_path = os.path.dirname(os.path.realpath(__file__))
   NqServer(web_path, examples).serve()
